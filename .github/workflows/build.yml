@@ -6,15 +6,19 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-      - name: Build with Buildozer
-        uses: ArtemSBulgakov/buildozer-action@v1
-        id: buildozer
+      - uses: actions/setup-python@v5
         with:
-          buildozer_version: stable
-          command: buildozer -v android debug
+          python-version: '3.10'
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential git unzip zip openjdk-17-jdk autoconf automake libtool pkg-config cmake ffmpeg libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev zlib1g-dev libgstreamer1.0 gstreamer1.0-plugins-base gstreamer1.0-plugins-good
+          pip install "setuptools<70" "cython<3.0" buildozer
+      - name: Build with Buildozer
+        run: buildozer -v android debug
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Unchanged-APK
-          path: ${{ steps.buildozer.outputs.filename }}
+          path: bin/*.apk
           
