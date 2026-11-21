@@ -5,9 +5,8 @@ pygame.init()
 pygame.font.init()
 screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
 W, H = screen.get_size()
-if W < H:
-    screen = pygame.display.set_mode((H, W), pygame.FULLSCREEN)
-    W, H = screen.get_size()
+screen.fill((28, 30, 38))
+pygame.display.flip()
 clock = pygame.time.Clock()
 
 def make_snd(kind):
