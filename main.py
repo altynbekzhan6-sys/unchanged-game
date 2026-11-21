@@ -1,19 +1,22 @@
-import pygame, random, math, struct, wave, os, tempfile
+import pygame, random, math, struct, wave, os, tempfile, traceback
 
 try:
-    pygame.mixer.pre_init(22050, -16, 1, 512)
+    pygame.init()
+    pygame.font.init()
+    screen = pygame.display.set_mode((0, 0))
+    W, H = screen.get_size()
+    screen.fill((28, 30, 38))
+    pygame.display.flip()
+    clock = pygame.time.Clock()
 except Exception:
-    pass
-pygame.init()
-pygame.font.init()
-screen = pygame.display.set_mode((0, 0))
-W, H = screen.get_size()
-screen.fill((28, 30, 38))
-pygame.display.flip()
-clock = pygame.time.Clock()
+    with open("/sdcard/Download/unchanged_err.txt", "w") as f:
+        f.write(traceback.format_exc())
+    raise
 
 def make_snd(kind):
     try:
+        if not pygame.mixer.get_init():
+            pygame.mixer.init()
         sr = 22050
         dur = 0.09 if kind in ("hit", "buy") else (0.14 if kind in ("shoot", "melee", "rel") else 0.45)
         n = int(sr * dur)
