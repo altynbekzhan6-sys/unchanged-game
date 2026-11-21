@@ -6,7 +6,7 @@ source.dir = .
 source.include_exts = py,png,jpg,kv,atlas
 version = 1.5
 icon.filename = %(source.dir)s/icon.jpg
-requirements = hostpython3==3.11.6,hostcython==0.29.36,python3==3.11.6,pygame==2.6.1
+requirements = python3,pygame_ce
 orientation = landscape
 fullscreen = 1
 android.archs = arm64-v8a
