@@ -1,16 +1,24 @@
-[app]
-title = Unchanged
-package.name = unchanged
-package.domain = org.unchangedgame
-source.dir = .
-source.include_exts = py,png,jpg,kv,atlas
-version = 1.5
-requirements = python3,pygame
-orientation = landscape
-fullscreen = 1
-android.archs = arm64-v8a
-android.allow_backup = True
+name: Build Unchanged APK
+on: [push]
 
-[buildozer]
-log_level = 2
-warn_on_root = 1
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential git unzip zip openjdk-17-jdk ffmpeg libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev zlib1g-dev libgstreamer1.0 gstreamer1.0-plugins-base gstreamer1.0-plugins-good
+          pip install buildozer cython==0.29.36
+      - name: Build with Buildozer
+        run: yes | buildozer -v android debug
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Unchanged-APK
+          path: bin/*.apk
+          
