@@ -1,14 +1,24 @@
 import pygame, random
+try:
+    import android
+except ImportError:
+    android = None
 
 pygame.init()
-screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+pygame.font.init()
+screen = pygame.display.set_mode((0, 0), pygame.SCALED | pygame.FULLSCREEN)
 W, H = screen.get_size()
+screen.fill((28, 30, 38))
+pygame.display.flip()
 clock = pygame.time.Clock()
+
 def init_layout():
-    global f_sm, f_md, f1_y, f2_y, lift_w, f1_r, f2_r, lift_x, lift_r, bomb_r, gen_r, p_sz
+    global f_sm, f_md, f_lg, f1_y, f2_y, lift_w, f1_r, f2_r, lift_x, lift_r, bomb_r, gen_r, p_sz
     global b_s, b_l, b_r, b_j, b_f, b_rel, b_act, m_r, o1, o2, o3, cl_b, o4, b_rep, tab_r, b_mel
-    f_sm = pygame.font.SysFont(None, max(20, int(H * 0.04)))
-    f_md = pygame.font.SysFont(None, max(28, int(H * 0.055)))
+    global b_play, b_exit, b_pause
+    f_sm = pygame.font.Font(None, max(20, int(H * 0.04)))
+    f_md = pygame.font.Font(None, max(28, int(H * 0.055)))
+    f_lg = pygame.font.Font(None, max(54, int(H * 0.12)))
     f1_y, f2_y, lift_w = int(H * 0.78), int(H * 0.42), int(W * 0.11)
     f1_r = pygame.Rect(-500, f1_y, W * 3, H - f1_y)
     f2_r = pygame.Rect(0, f2_y, W - lift_w - 20, int(H * 0.035))
@@ -27,6 +37,10 @@ def init_layout():
     b_rel = pygame.Rect(W - b_s * 3 - 55, by, b_s, b_s)
     b_act = pygame.Rect(W // 2 - int(b_s * 1.1), by, int(b_s * 2.2), b_s)
     b_rep = pygame.Rect(W // 2 - int(b_s * 1.1), by - int(b_s * 0.56) - 4, int(b_s * 2.2), int(b_s * 0.52))
+    b_pause = pygame.Rect(W - 65, 14, 50, 44)
+    bw_m, bh_m = int(W * 0.34), int(H * 0.12)
+    b_play = pygame.Rect(W // 2 - bw_m // 2, int(H * 0.48), bw_m, bh_m)
+    b_exit = pygame.Rect(W // 2 - bw_m // 2, int(H * 0.64), bw_m, bh_m)
     mw, mh = int(W * 0.65), int(H * 0.65)
     m_r = pygame.Rect((W - mw) // 2, (H - mh) // 2, mw, mh)
     o1 = pygame.Rect(m_r.x + 30, m_r.y + 65, mw - 60, int(mh * 0.16))
@@ -48,7 +62,7 @@ weapons = {
     2: {"n": "Дробовик", "d": 16, "cd": 28, "m": 8,  "s": 3},
 }
 w_idx, ammo, rel_t, scd, muz_t, mel_t, mel_cd = 0, 12, 0, 0, 0, 0, 0
-bullets, enemies, bars, sp_t, fingers, state = [], [], [], 0, {}, "PLAY"
+bullets, enemies, bars, sp_t, fingers, state = [], [], [], 0, {}, "MENU"
 turrets = []
 
 def reset():
@@ -104,6 +118,21 @@ while run:
             fingers[ev.finger_id] = (ev.x * W, ev.y * H)
         elif ev.type == pygame.FINGERUP:
             fingers.pop(ev.finger_id, None)
+        elif ev.type == pygame.MOUSEBUTTONDOWN:
+            fingers["m"] = tap = ev.pos
+        elif ev.type == pygame.MOUSEMOTION and "m" in fingers:
+            fingers["m"] = ev.pos
+        elif ev.type == pygame.MOUSEBUTTONUP:
+            fingers.pop("m", None)
+
+    if state == "MENU":
+        if tap:
+            if b_play.collidepoint(tap): reset()
+            elif b_exit.collidepoint(tap): run = False
+    elif state == "PAUSE":
+        if tap:
+            if b_play.collidepoint(tap): state = "PLAY"
+            elif b_exit.collidepoint(tap): state = "MENU"
 
     if gen_hp <= 0 and state in ("SHOP", "BUFF"): state = "PLAY"
 
@@ -128,6 +157,7 @@ while run:
     elif state in ("OVER", "WIN") and tap: reset()
 
     if state == "PLAY":
+        if tap and b_pause.collidepoint(tap): state = "PAUSE"
         ml = mr = False
         for p in fingers.values():
             if b_l.collidepoint(p): ml = True
@@ -200,6 +230,7 @@ while run:
         for b in bullets[:]:
             b["r"].x += b["vx"]; b["r"].y += b["vy"]
             if b["r"].right < 0 or b["r"].left > W: bullets.remove(b)
+
         for e in enemies[:]:
             er = e["r"]
             if e["atk_cd"] > 0: e["atk_cd"] -= 1
@@ -296,65 +327,83 @@ while run:
     pygame.draw.rect(screen, (50, 55, 60), bomb_r, border_radius=6)
     pygame.draw.circle(screen, (255, 50, 50) if (pygame.time.get_ticks() // 300) % 2 == 0 else (150, 30, 30), bomb_r.center, 10)
     pygame.draw.rect(screen, (60, 220, 90), (bomb_r.x - 15, bomb_r.y - 16, int(80 * max(0, bomb_hp) / 200), 8))
-    s_lbl = f_sm.render("soldier", True, (140, 210, 255))
-    screen.blit(s_lbl, (player.centerx - s_lbl.get_width() // 2, player.top - 28))
-    for bar in bars: pygame.draw.rect(screen, (150, 100, 50), bar["r"])
-    pygame.draw.rect(screen, (70, 150, 255), player)
-    gun = pygame.Rect(player.right - 4 if right else player.left - 26, player.centery - 6, 30, 10)
-    pygame.draw.rect(screen, (20, 20, 25), gun)
-    if muz_t > 0:
-        mx, my, ds = (gun.right if right else gun.left), gun.centery, (1 if right else -1)
-        pygame.draw.polygon(screen, (255, 160, 0), [(mx, my), (mx + 26 * ds, my - 11), (mx + 38 * ds, my), (mx + 26 * ds, my + 11)])
-    if mel_t > 0:
-        ds = 1 if right else -1
-        sx = player.right + 15 if right else player.left - 15
-        pygame.draw.arc(screen, (255, 255, 255), (sx - 35, player.top - 10, 70, player.height + 20), -1.2 if right else 1.9, 1.2 if right else 4.3, 6)
-    for b in bullets: pygame.draw.rect(screen, (255, 230, 60), b["r"])
-    for e in enemies:
-         er = e["r"]
-         pygame.draw.rect(screen, (220, 60, 60), er)
-         pygame.draw.rect(screen, (60, 220, 90), (er.x, er.y - 10, int(er.width * max(0, e["hp"]) / e["max_hp"]), 6))
-         f_lbl = f_sm.render("furry", True, (255, 160, 160))
-         screen.blit(f_lbl, (er.centerx - f_lbl.get_width() // 2, er.y - 36))
-    if timer <= 0:
-        pygame.draw.ellipse(screen, (60, 110, 70), (heli_x, int(H * 0.16), 170, 65))
-        pygame.draw.rect(screen, (50, 95, 60), (heli_x - 80, int(H * 0.16) + 22, 90, 16))
-        rw = 180 if (rotor // 2) % 2 == 0 else 40
-        pygame.draw.line(screen, (220, 220, 220), (heli_x + 85 - rw, int(H * 0.16) - 10), (heli_x + 85 + rw, int(H * 0.16) - 10), 5)
 
-    pygame.draw.rect(screen, (160, 40, 40), (20, 18, 200, 22))
-    pygame.draw.rect(screen, (60, 220, 90), (20, 18, int(200 * max(0, hp) / 100), 22))
-    screen.blit(f_sm.render(f"HP: {int(hp)}", True, (255, 255, 255)), (25, 20))
-    rep_col = (100, 230, 130) if (pwr and any(t["hp"] < 100 for t in turrets)) else (90, 95, 105)
-    pygame.draw.rect(screen, rep_col, b_rep, border_radius=12)
-    rt = f_sm.render("РЕМОНТ (20)" if pwr else "НЕТ ЭНЕРГИИ", True, (20, 20, 20))
-    screen.blit(rt, (b_rep.centerx - rt.get_width() // 2, b_rep.centery - rt.get_height() // 2))
+    if state in ("MENU", "PAUSE"):
+        ov = pygame.Surface((W, H), pygame.SRCALPHA)
+        ov.fill((10, 12, 18, 200))
+        screen.blit(ov, (0, 0))
+        ttl = f_lg.render("UNCHANGED" if state == "MENU" else "ПАУЗА", True, (0, 215, 255))
+        sub = f_sm.render("v1.6 | ЗАЩИТИ ГЕНЕРАТОР И БОМБУ" if state == "MENU" else f"УБИТО: {kills}  |  МОНЕТЫ: {coins}", True, (180, 190, 210))
+        screen.blit(ttl, (W // 2 - ttl.get_width() // 2, int(H * 0.18)))
+        screen.blit(sub, (W // 2 - sub.get_width() // 2, int(H * 0.34)))
+        for br, col, txt in ((b_play, (60, 210, 110), "ИГРАТЬ" if state == "MENU" else "ПРОДОЛЖИТЬ"),
+                             (b_exit, (210, 65, 65), "ВЫХОД" if state == "MENU" else "В МЕНЮ")):
+            pygame.draw.rect(screen, col, br, border_radius=18)
+            ts = f_md.render(txt, True, (20, 20, 20))
+            screen.blit(ts, (br.centerx - ts.get_width() // 2, br.centery - ts.get_height() // 2))
+    else:
+        s_lbl = f_sm.render("soldier", True, (140, 210, 255))
+        screen.blit(s_lbl, (player.centerx - s_lbl.get_width() // 2, player.top - 28))
+        for bar in bars: pygame.draw.rect(screen, (150, 100, 50), bar["r"])
+        pygame.draw.rect(screen, (70, 150, 255), player)
+        gun = pygame.Rect(player.right - 4 if right else player.left - 26, player.centery - 6, 30, 10)
+        pygame.draw.rect(screen, (20, 20, 25), gun)
+        if muz_t > 0:
+            mx, my, ds = (gun.right if right else gun.left), gun.centery, (1 if right else -1)
+            pygame.draw.polygon(screen, (255, 160, 0), [(mx, my), (mx + 26 * ds, my - 11), (mx + 38 * ds, my), (mx + 26 * ds, my + 11)])
+        if mel_t > 0:
+            sx = player.right + 15 if right else player.left - 15
+            pygame.draw.arc(screen, (255, 255, 255), (sx - 35, player.top - 10, 70, player.height + 20), -1.2 if right else 1.9, 1.2 if right else 4.3, 6)
+        for b in bullets: pygame.draw.rect(screen, (255, 230, 60), b["r"])
+        for e in enemies:
+             er = e["r"]
+             pygame.draw.rect(screen, (220, 60, 60), er)
+             pygame.draw.rect(screen, (60, 220, 90), (er.x, er.y - 10, int(er.width * max(0, e["hp"]) / e["max_hp"]), 6))
+             f_lbl = f_sm.render("furry", True, (255, 160, 160))
+             screen.blit(f_lbl, (er.centerx - f_lbl.get_width() // 2, er.y - 36))
+        if timer <= 0:
+            pygame.draw.ellipse(screen, (60, 110, 70), (heli_x, int(H * 0.16), 170, 65))
+            pygame.draw.rect(screen, (50, 95, 60), (heli_x - 80, int(H * 0.16) + 22, 90, 16))
+            rw = 180 if (rotor // 2) % 2 == 0 else 40
+            pygame.draw.line(screen, (220, 220, 220), (heli_x + 85 - rw, int(H * 0.16) - 10), (heli_x + 85 + rw, int(H * 0.16) - 10), 5)
 
-    cw_d = weapons[w_idx]
-    screen.blit(f_sm.render("ПЕРЕЗАРЯДКА..." if rel_t > 0 else f"{cw_d['n']}: {ammo}/{cw_d['m'] + ammo_l * 6}", True, (255, 230, 120)), (20, 48))
-    sl = timer // 60
-    screen.blit(f_md.render(f"БОМБА: {sl // 60:02d}:{sl % 60:02d}", True, (255, 90, 90)), (W // 2 - 90, 18))
-    screen.blit(f_sm.render(f"Монеты: {coins} | Убито: {kills}", True, (255, 215, 0)), (W - 360, 20))
+        pygame.draw.rect(screen, (160, 40, 40), (20, 18, 200, 22))
+        pygame.draw.rect(screen, (60, 220, 90), (20, 18, int(200 * max(0, hp) / 100), 22))
+        screen.blit(f_sm.render(f"HP: {int(hp)}", True, (255, 255, 255)), (25, 20))
+        rep_col = (100, 230, 130) if (pwr and any(t["hp"] < 100 for t in turrets)) else (90, 95, 105)
+        pygame.draw.rect(screen, rep_col, b_rep, border_radius=12)
+        rt = f_sm.render("РЕМОНТ (20)" if pwr else "НЕТ ЭНЕРГИИ", True, (20, 20, 20))
+        screen.blit(rt, (b_rep.centerx - rt.get_width() // 2, b_rep.centery - rt.get_height() // 2))
 
-    act_c = (100, 180, 255) if (pwr or nlift) else (90, 95, 105)
-    mel_c = (255, 140, 50) if mel_cd == 0 else (120, 90, 60)
-    for r, col, txt in ((b_l, (210,210,210), "<"), (b_r, (210,210,210), ">"), (b_act, act_c, act_lbl),
-                        (b_rel, (180,140,255), "R"), (b_f, (255,85,85), "FIRE"), (b_j, (255,190,60), "UP"), (b_mel, mel_c, "УДАР")):
-        pygame.draw.rect(screen, col, r, border_radius=16)
-        ts = f_sm.render(txt, True, (20, 20, 20))
-        screen.blit(ts, (r.centerx - ts.get_width() // 2, r.centery - ts.get_height() // 2))
+        cw_d = weapons[w_idx]
+        screen.blit(f_sm.render("ПЕРЕЗАРЯДКА..." if rel_t > 0 else f"{cw_d['n']}: {ammo}/{cw_d['m'] + ammo_l * 6}", True, (255, 230, 120)), (20, 48))
+        sl = timer // 60
+        screen.blit(f_md.render(f"БОМБА: {sl // 60:02d}:{sl % 60:02d}", True, (255, 90, 90)), (W // 2 - 90, 18))
+        screen.blit(f_sm.render(f"Монеты: {coins} | Убито: {kills}", True, (255, 215, 0)), (W - 430, 20))
 
-    if state in ("SHOP", "BUFF"):
-        pygame.draw.rect(screen, (35, 38, 48), m_r, border_radius=20)
-        pygame.draw.rect(screen, (220, 60, 60), cl_b, border_radius=12)
-        screen.blit(f_md.render("X", True, (255, 255, 255)), (cl_b.centerx - 12, cl_b.centery - 15))
-        opts = ["Аптечка +40HP (30)", "Баррикада (40)", f"Оружие ({100 if w_idx==0 else 200})" if w_idx < 2 else "Макс. оружие", "Турель 1 ур. (80)"] if state == "SHOP" else [
-               f"Скорость {spd_l}/4 (50)", f"Вампиризм {vamp_l}/4 (70)", f"Патроны {ammo_l}/4 (60)", f"Урон {dmg_l}/4 (80)"]
-        for br, ot in zip((o1, o2, o3, o4), opts):
-            pygame.draw.rect(screen, (60, 65, 80), br, border_radius=12)
-            screen.blit(f_sm.render(ot, True, (255, 255, 255)), (br.x + 20, br.centery - 12))
-    elif state in ("OVER", "WIN"):
-        screen.blit(f_md.render("ПОБЕДА! ВЕРТОЛЕТ ПРИЛЕТЕЛ!" if state == "WIN" else "ПОРАЖЕНИЕ! НАЖМИ ДЛЯ РЕСТАРТА", True, (80, 255, 120) if state == "WIN" else (255, 80, 80)), (W // 2 - 220, H // 2))
+        pygame.draw.rect(screen, (70, 75, 90), b_pause, border_radius=10)
+        pt = f_sm.render("||", True, (255, 255, 255))
+        screen.blit(pt, (b_pause.centerx - pt.get_width() // 2, b_pause.centery - pt.get_height() // 2))
+
+        act_c = (100, 180, 255) if (pwr or nlift) else (90, 95, 105)
+        mel_c = (255, 140, 50) if mel_cd == 0 else (120, 90, 60)
+        for r, col, txt in ((b_l, (210,210,210), "<"), (b_r, (210,210,210), ">"), (b_act, act_c, act_lbl),
+                            (b_rel, (180,140,255), "R"), (b_f, (255,85,85), "FIRE"), (b_j, (255,190,60), "UP"), (b_mel, mel_c, "УДАР")):
+            pygame.draw.rect(screen, col, r, border_radius=16)
+            ts = f_sm.render(txt, True, (20, 20, 20))
+            screen.blit(ts, (r.centerx - ts.get_width() // 2, r.centery - ts.get_height() // 2))
+
+        if state in ("SHOP", "BUFF"):
+            pygame.draw.rect(screen, (35, 38, 48), m_r, border_radius=20)
+            pygame.draw.rect(screen, (220, 60, 60), cl_b, border_radius=12)
+            screen.blit(f_md.render("X", True, (255, 255, 255)), (cl_b.centerx - 12, cl_b.centery - 15))
+            opts = ["Аптечка +40HP (30)", "Баррикада (40)", f"Оружие ({100 if w_idx==0 else 200})" if w_idx < 2 else "Макс. оружие", "Турель 1 ур. (80)"] if state == "SHOP" else [
+                   f"Скорость {spd_l}/4 (50)", f"Вампиризм {vamp_l}/4 (70)", f"Патроны {ammo_l}/4 (60)", f"Урон {dmg_l}/4 (80)"]
+            for br, ot in zip((o1, o2, o3, o4), opts):
+                pygame.draw.rect(screen, (60, 65, 80), br, border_radius=12)
+                screen.blit(f_sm.render(ot, True, (255, 255, 255)), (br.x + 20, br.centery - 12))
+        elif state in ("OVER", "WIN"):
+            screen.blit(f_md.render("ПОБЕДА! ВЕРТОЛЕТ ПРИЛЕТЕЛ!" if state == "WIN" else "ПОРАЖЕНИЕ! НАЖМИ ДЛЯ РЕСТАРТА", True, (80, 255, 120) if state == "WIN" else (255, 80, 80)), (W // 2 - 220, H // 2))
 
     pygame.display.flip()
     clock.tick(60)
