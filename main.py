@@ -1,28 +1,18 @@
-import os
-os.environ['SDL_VIDEODRIVER'] = 'android'
-import pygame, random, math, struct, wave, os, tempfile, traceback
-
-try:
-    pygame.init()
-    pygame.font.init()
-    screen = pygame.display.set_mode((0, 0))
-    W, H = screen.get_size()
-    screen.fill((28, 30, 38))
-    pygame.display.flip()
-    clock = pygame.time.Clock()
-except Exception:
-    with open("/sdcard/Download/unchanged_err.txt", "w") as f:
-        f.write(traceback.format_exc())
-    raise
+import random, math, struct, wave, os, tempfile
+from kivy.app import App
+from kivy.uix.widget import Widget
+from kivy.clock import Clock
+from kivy.graphics import Color, Rectangle, Ellipse, Line
+from kivy.core.text import Label as CoreLabel
+from kivy.core.audio import SoundLoader
+from kivy.core.window import Window
 
 def make_snd(kind):
     try:
-        if not pygame.mixer.get_init():
-            pygame.mixer.init()
         sr = 22050
-        dur = 0.09 if kind in ("hit", "buy") else (0.14 if kind in ("shoot", "melee", "rel") else 0.45)
+        dur = 0.08 if kind in ("hit", "buy") else (0.13 if kind in ("shoot", "melee", "rel") else 0.4)
         n = int(sr * dur)
-        path = os.path.join(tempfile.gettempdir(), f"unch_{kind}.wav")
+        path = os.path.join(tempfile.gettempdir(), f"uk_{kind}.wav")
         with wave.open(path, "wb") as wf:
             wf.setnchannels(1); wf.setsampwidth(2); wf.setframerate(sr)
             frames = bytearray()
@@ -42,415 +32,513 @@ def make_snd(kind):
                     v = (1.0 if math.sin(2 * math.pi * 320 * t) > 0 else -1.0) * env * 0.35
                 else:
                     v = math.sin(2 * math.pi * (520 if int(t * 14) % 2 == 0 else 360) * t) * env * 0.7
-                frames += struct.pack("<h", int(max(-1, min(1, v)) * 22000))
+                frames += struct.pack("<h", int(max(-1, min(1, v)) * 20000))
             wf.writeframes(frames)
-        return pygame.mixer.Sound(path)
+        return SoundLoader.load(path)
     except Exception:
         return None
 
-snds = {k: make_snd(k) for k in ("shoot", "melee", "hit", "buy", "rel", "alarm")}
-def play_s(k):
-    if snds.get(k):
-        try: snds[k].play()
-        except Exception: pass
+def hit(r, x, y):
+    return r[0] <= x <= r[0] + r[2] and r[1] <= y <= r[1] + r[3]
 
-def init_layout():
-    global f_sm, f_md, f_lg, f1_y, f2_y, lift_w, f1_r, f2_r, lift_x, lift_r, bomb_r, gen_r, p_sz
-    global b_s, b_l, b_r, b_j, b_f, b_rel, b_act, m_r, o1, o2, o3, cl_b, o4, b_rep, tab_r, b_mel
-    global b_play, b_exit, b_pause
-    f_sm = pygame.font.Font(None, max(20, int(H * 0.04)))
-    f_md = pygame.font.Font(None, max(28, int(H * 0.055)))
-    f_lg = pygame.font.Font(None, max(54, int(H * 0.12)))
-    f1_y, f2_y, lift_w = int(H * 0.78), int(H * 0.42), int(W * 0.11)
-    f1_r = pygame.Rect(-500, f1_y, W * 3, H - f1_y)
-    f2_r = pygame.Rect(0, f2_y, W - lift_w - 20, int(H * 0.035))
-    lift_x = W - lift_w - 10
-    lift_r = pygame.Rect(lift_x, f1_y - 16, lift_w, 16)
-    bomb_r = pygame.Rect(W // 2 - 25, f2_y - 45, 50, 45)
-    gen_r = pygame.Rect(W // 2 - 35, f1_y - 65, 70, 65)
-    tab_r = pygame.Rect(int(W * 0.22), f2_y - 68, 44, 52)
-    p_sz = int(H * 0.11)
-    b_s = int(H * 0.15)
-    by = H - b_s - int(H * 0.025)
-    b_l, b_r = pygame.Rect(25, by, b_s, b_s), pygame.Rect(35 + b_s, by, b_s, b_s)
-    b_j = pygame.Rect(W - b_s - 25, by, b_s, b_s)
-    b_f = pygame.Rect(W - b_s * 2 - 40, by, b_s, b_s)
-    b_mel = pygame.Rect(W - b_s * 2 - 40, by - int(b_s * 0.56) - 4, b_s, int(b_s * 0.52))
-    b_rel = pygame.Rect(W - b_s * 3 - 55, by, b_s, b_s)
-    b_act = pygame.Rect(W // 2 - int(b_s * 1.1), by, int(b_s * 2.2), b_s)
-    b_rep = pygame.Rect(W // 2 - int(b_s * 1.1), by - int(b_s * 0.56) - 4, int(b_s * 2.2), int(b_s * 0.52))
-    b_pause = pygame.Rect(W - 65, 14, 50, 44)
-    bw_m, bh_m = int(W * 0.34), int(H * 0.12)
-    b_play = pygame.Rect(W // 2 - bw_m // 2, int(H * 0.48), bw_m, bh_m)
-    b_exit = pygame.Rect(W // 2 - bw_m // 2, int(H * 0.64), bw_m, bh_m)
-    mw, mh = int(W * 0.65), int(H * 0.65)
-    m_r = pygame.Rect((W - mw) // 2, (H - mh) // 2, mw, mh)
-    o1 = pygame.Rect(m_r.x + 30, m_r.y + 65, mw - 60, int(mh * 0.16))
-    o2 = pygame.Rect(m_r.x + 30, m_r.y + 75 + int(mh * 0.16), mw - 60, int(mh * 0.16))
-    o3 = pygame.Rect(m_r.x + 30, m_r.y + 85 + int(mh * 0.32), mw - 60, int(mh * 0.16))
-    o4 = pygame.Rect(m_r.x + 30, m_r.y + 95 + int(mh * 0.48), mw - 60, int(mh * 0.16))
-    cl_b = pygame.Rect(m_r.right - 65, m_r.y + 15, 50, 50)
+def ovl(a, b):
+    return a[0] < b[0] + b[2] and a[0] + a[2] > b[0] and a[1] < b[1] + b[3] and a[1] + a[3] > b[1]
 
-init_layout()
-lift_ty, lift_top = f1_y - 16, False
-bomb_hp, gen_hp, timer, heli_x, rotor = 200, 250, 10 * 60 * 60, -250, 0
-player = pygame.Rect(W // 2 - 80, f1_y - p_sz, p_sz, p_sz)
-hp, coins, kills, spd_l, vamp_l, ammo_l, dmg_l = 100, 0, 0, 0, 0, 0, 0
-vy, on_g, right = 0, True, True
+class GameWidget(Widget):
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        self.snds = {k: make_snd(k) for k in ("shoot", "melee", "hit", "buy", "rel", "alarm")}
+        self.tex_cache = {}
+        self.fingers = {}
+        self.state = "MENU"
+        self.weapons = {
+            0: {"n": "Пистолет", "d": 20, "cd": 16, "m": 12, "s": 1},
+            1: {"n": "Автомат",  "d": 18, "cd": 7,  "m": 30, "s": 1},
+            2: {"n": "Дробовик", "d": 16, "cd": 28, "m": 8,  "s": 3},
+        }
+        self.W, self.H = 0, 0
+        self.bind(size=self.on_resize)
+        Clock.schedule_interval(self.update, 1.0 / 60.0)
 
-weapons = {
-    0: {"n": "Пистолет", "d": 20, "cd": 16, "m": 12, "s": 1},
-    1: {"n": "Автомат",  "d": 18, "cd": 7,  "m": 30, "s": 1},
-    2: {"n": "Дробовик", "d": 16, "cd": 28, "m": 8,  "s": 3},
-}
-w_idx, ammo, rel_t, scd, muz_t, mel_t, mel_cd = 0, 12, 0, 0, 0, 0, 0
-bullets, enemies, bars, sp_t, fingers, state = [], [], [], 0, {}, "MENU"
-turrets = []
+    def play_s(self, k):
+        s = self.snds.get(k)
+        if s:
+            try: s.stop(); s.play()
+            except Exception: pass
 
-def reset():
-    global hp, coins, kills, spd_l, vamp_l, ammo_l, dmg_l, w_idx, ammo, rel_t, bomb_hp, gen_hp, timer, lift_top, lift_ty, heli_x, state, mel_t, mel_cd
-    player.midbottom = (W // 2 - 80, f1_y)
-    hp, coins, kills, spd_l, vamp_l, ammo_l, dmg_l, w_idx, ammo, rel_t = 100, 0, 0, 0, 0, 0, 0, 0, 12, 0
-    bomb_hp, gen_hp, timer, lift_top, lift_ty, heli_x, state, mel_t, mel_cd = 200, 250, 10 * 60 * 60, False, f1_y - 16, -250, "PLAY", 0, 0
-    lift_r.y = lift_ty
-    bullets.clear(); enemies.clear(); bars.clear(); turrets.clear()
+    def on_resize(self, *args):
+        w, h = self.width, self.height
+        if w < 10 or h < 10: return
+        first = (self.W == 0)
+        self.W, self.H = w, h
+        self.f1_y, self.f2_y, self.lift_w = h * 0.22, h * 0.58, w * 0.11
+        self.lift_x = w - self.lift_w - 10
+        self.p_sz = h * 0.11
+        self.bomb_r = (w * 0.5 - 25, self.f2_y, 50, 45)
+        self.gen_r = (w * 0.5 - 35, self.f1_y, 70, 65)
+        self.tab_r = (w * 0.22, self.f2_y + 16, 44, 52)
+        bs = h * 0.15
+        by = h * 0.025
+        self.b_l = (25, by, bs, bs)
+        self.b_r = (35 + bs, by, bs, bs)
+        self.b_j = (w - bs - 25, by, bs, bs)
+        self.b_f = (w - bs * 2 - 40, by, bs, bs)
+        self.b_mel = (w - bs * 2 - 40, by + bs + 6, bs, bs * 0.52)
+        self.b_rel = (w - bs * 3 - 55, by, bs, bs)
+        self.b_act = (w * 0.5 - bs * 1.1, by, bs * 2.2, bs)
+        self.b_rep = (w * 0.5 - bs * 1.1, by + bs + 6, bs * 2.2, bs * 0.52)
+        self.b_pause = (w - 65, h - 58, 50, 44)
+        bw, bh = w * 0.34, h * 0.12
+        self.b_play = (w * 0.5 - bw * 0.5, h * 0.40, bw, bh)
+        self.b_exit = (w * 0.5 - bw * 0.5, h * 0.24, bw, bh)
+        mw, mh = w * 0.65, h * 0.65
+        mx, my = (w - mw) * 0.5, (h - mh) * 0.5
+        self.m_r = (mx, my, mw, mh)
+        oh = mh * 0.16
+        self.o1 = (mx + 30, my + mh - 65 - oh, mw - 60, oh)
+        self.o2 = (mx + 30, my + mh - 75 - oh * 2, mw - 60, oh)
+        self.o3 = (mx + 30, my + mh - 85 - oh * 3, mw - 60, oh)
+        self.o4 = (mx + 30, my + mh - 95 - oh * 4, mw - 60, oh)
+        self.cl_b = (mx + mw - 65, my + mh - 65, 50, 50)
+        if first:
+            self.reset()
+            self.state = "MENU"
 
-def start_rel():
-    global rel_t
-    if rel_t == 0 and ammo < weapons[w_idx]["m"] + ammo_l * 6:
-        rel_t = 60; play_s("rel")
+    def reset(self):
+        w, h = self.W, self.H
+        self.px, self.py = w * 0.5 - 80, self.f1_y
+        self.hp, self.coins, self.kills = 100, 0, 0
+        self.spd_l, self.vamp_l, self.ammo_l, self.dmg_l = 0, 0, 0, 0
+        self.w_idx, self.ammo, self.rel_t, self.scd, self.muz_t, self.mel_t, self.mel_cd = 0, 12, 0, 0, 0, 0, 0
+        self.bomb_hp, self.gen_hp, self.timer, self.heli_x, self.rotor = 200, 250, 10 * 3600, -250, 0
+        self.lift_y, self.lift_ty, self.lift_top = self.f1_y, self.f1_y, False
+        self.vy, self.on_g, self.right = 0, True, True
+        self.bullets, self.enemies, self.bars, self.turrets = [], [], [], []
+        self.sp_t = 0
+        self.state = "PLAY"
 
-def shoot():
-    global ammo, scd, muz_t
-    if rel_t > 0 or scd > 0: return
-    if ammo <= 0: start_rel(); return
-    w = weapons[w_idx]
-    ammo -= 1; scd = w["cd"]; muz_t = 4; play_s("shoot")
-    dx = 1 if right else -1
-    tx = player.right + 20 if right else player.left - 30
-    spread = (0,) if w["s"] == 1 else (-3, 0, 3)
-    for dy in spread:
-        bullets.append({"r": pygame.Rect(tx, player.centery - 4, 15, 6), "vx": 22 * dx, "vy": dy, "d": w["d"] + dmg_l * 5})
-    if ammo == 0: start_rel()
+    def txt_tex(self, text, size):
+        key = (text, int(size))
+        if key not in self.tex_cache:
+            if len(self.tex_cache) > 150: self.tex_cache.clear()
+            lbl = CoreLabel(text=text, font_size=max(14, int(size)))
+            lbl.refresh()
+            self.tex_cache[key] = lbl.texture
+        return self.tex_cache[key]
 
-def melee():
-    global mel_t, mel_cd
-    if mel_cd > 0: return
-    mel_t = 10; mel_cd = 24; play_s("melee")
-    dx = 1 if right else -1
-    hit_r = pygame.Rect(player.right - 10 if right else player.left - 75, player.top - 10, 85, player.height + 20)
-    for e in enemies:
-        if hit_r.colliderect(e["r"]):
-            e["hp"] -= 30 + dmg_l * 5; play_s("hit")
-            e["r"].x = max(0, min(W - e["r"].width, e["r"].x + 110 * dx))
-            e["vy"] = -7; e["g"] = False
+    def draw_txt(self, text, cx, cy, size, col=(1, 1, 1, 1), center=True):
+        tex = self.txt_tex(text, size)
+        Color(*col)
+        x = cx - tex.width * 0.5 if center else cx
+        y = cy - tex.height * 0.5 if center else cy
+        Rectangle(texture=tex, pos=(x, y), size=tex.size)
 
-run = True
-while run:
-    cw, ch = screen.get_size()
-    if cw != W or ch != H:
-        W, H = cw, ch; init_layout()
-        lift_ty = f2_y if lift_top else f1_y - 16; lift_r.y = lift_ty
-        player.size = (p_sz, p_sz); player.midbottom = (W // 2 - 80, f1_y)
-    tap = None
-    for ev in pygame.event.get():
-        if ev.type == pygame.QUIT: run = False
-        elif ev.type == pygame.FINGERDOWN:
-            fingers[ev.finger_id] = tap = (ev.x * W, ev.y * H)
-        elif ev.type == pygame.FINGERMOTION:
-            fingers[ev.finger_id] = (ev.x * W, ev.y * H)
-        elif ev.type == pygame.FINGERUP:
-            fingers.pop(ev.finger_id, None)
-        elif ev.type == pygame.MOUSEBUTTONDOWN:
-            fingers["m"] = tap = ev.pos
-        elif ev.type == pygame.MOUSEMOTION and "m" in fingers:
-            fingers["m"] = ev.pos
-        elif ev.type == pygame.MOUSEBUTTONUP:
-            fingers.pop("m", None)
+    def start_rel(self):
+        if self.rel_t == 0 and self.ammo < self.weapons[self.w_idx]["m"] + self.ammo_l * 6:
+            self.rel_t = 60; self.play_s("rel")
 
-    if state == "MENU":
-        if tap:
-            if b_play.collidepoint(tap): play_s("buy"); reset()
-            elif b_exit.collidepoint(tap): run = False
-    elif state == "PAUSE":
-        if tap:
-            if b_play.collidepoint(tap): play_s("buy"); state = "PLAY"
-            elif b_exit.collidepoint(tap): state = "MENU"
+    def shoot(self):
+        if self.rel_t > 0 or self.scd > 0: return
+        if self.ammo <= 0: self.start_rel(); return
+        w = self.weapons[self.w_idx]
+        self.ammo -= 1; self.scd = w["cd"]; self.muz_t = 4; self.play_s("shoot")
+        dx = 1 if self.right else -1
+        tx = self.px + self.p_sz + 15 if self.right else self.px - 25
+        spread = (0,) if w["s"] == 1 else (-3, 0, 3)
+        for dy in spread:
+            self.bullets.append([tx, self.py + self.p_sz * 0.5, 22 * dx, dy, w["d"] + self.dmg_l * 5])
+        if self.ammo == 0: self.start_rel()
 
-    if gen_hp <= 0 and state in ("SHOP", "BUFF"): state = "PLAY"
+    def melee(self):
+        if self.mel_cd > 0: return
+        self.mel_t = 10; self.mel_cd = 24; self.play_s("melee")
+        dx = 1 if self.right else -1
+        hr = (self.px + self.p_sz - 10 if self.right else self.px - 75, self.py - 10, 85, self.p_sz + 20)
+        for e in self.enemies:
+            if ovl(hr, (e[0], e[1], e[2], e[2])):
+                e[3] -= 30 + self.dmg_l * 5; self.play_s("hit")
+                e[0] = max(0, min(self.W - e[2], e[0] + 110 * dx))
+                e[6] = 7; e[7] = False
+    def on_touch_down(self, touch):
+        self.fingers[touch.uid] = (touch.x, touch.y)
+        self.handle_tap(touch.x, touch.y)
+        return True
 
-    if state in ("SHOP", "BUFF") and tap:
-        if cl_b.collidepoint(tap): state = "PLAY"
-        elif state == "SHOP":
-            if o1.collidepoint(tap) and coins >= 30 and hp < 100: coins -= 30; hp = min(100, hp + 40); play_s("buy")
-            elif o2.collidepoint(tap) and coins >= 40:
-                coins -= 40; play_s("buy")
-                bars.append({"r": pygame.Rect(player.right + 15 if right else player.left - 35, player.bottom - 55, 22, 55), "hp": 120})
-            elif o3.collidepoint(tap) and w_idx < 2:
-                c = 100 if w_idx == 0 else 200
-                if coins >= c: coins -= c; w_idx += 1; ammo = weapons[w_idx]["m"] + ammo_l * 6; rel_t = 0; play_s("buy")
-            elif o4.collidepoint(tap) and coins >= 80:
-                coins -= 80; play_s("buy")
-                turrets.append({"r": pygame.Rect(player.centerx - 15, player.bottom - 35, 30, 35), "cd": 0, "hp": 100})
-        else:
-            if o1.collidepoint(tap) and coins >= 50 and spd_l < 4: coins -= 50; spd_l += 1; play_s("buy")
-            elif o2.collidepoint(tap) and coins >= 70 and vamp_l < 4: coins -= 70; vamp_l += 1; play_s("buy")
-            elif o3.collidepoint(tap) and coins >= 60 and ammo_l < 4: coins -= 60; ammo_l += 1; ammo = weapons[w_idx]["m"] + ammo_l * 6; play_s("buy")
-            elif o4.collidepoint(tap) and coins >= 80 and dmg_l < 4: coins -= 80; dmg_l += 1; play_s("buy")
-    elif state in ("OVER", "WIN") and tap: reset()
-    if state == "PLAY":
-        if tap and b_pause.collidepoint(tap): state = "PAUSE"
-        ml = mr = False
-        for p in fingers.values():
-            if b_l.collidepoint(p): ml = True
-            if b_r.collidepoint(p): mr = True
-            if b_j.collidepoint(p) and on_g: vy = -21; on_g = False
-            if b_f.collidepoint(p): shoot()
+    def on_touch_move(self, touch):
+        if touch.uid in self.fingers:
+            self.fingers[touch.uid] = (touch.x, touch.y)
+        return True
 
-        ntab = player.colliderect(tab_r.inflate(40, 20))
-        nlift = abs(player.centerx - lift_r.centerx) < lift_w
-        if nlift: act_lbl = "ЛИФТ ВНИЗ" if lift_top else "ЛИФТ ВВЕРХ"
-        elif gen_hp <= 0: act_lbl = "НЕТ ЭНЕРГИИ"
-        else: act_lbl = "БАФФЫ" if ntab else "МАГАЗИН"
+    def on_touch_up(self, touch):
+        self.fingers.pop(touch.uid, None)
+        return True
 
-        if tap and b_mel.collidepoint(tap): melee()
-        if gen_hp > 0 and tap and tab_r.inflate(25, 25).collidepoint(tap): state = "BUFF"
-        if tap and b_rel.collidepoint(tap): start_rel()
-        if tap and b_act.collidepoint(tap):
-            if nlift: lift_top = not lift_top; lift_ty = f2_y if lift_top else f1_y - 16
-            elif gen_hp > 0: state = "BUFF" if ntab else "SHOP"
-        if gen_hp > 0 and tap and b_rep.collidepoint(tap) and coins >= 20:
-            dmg_t = [t for t in turrets if t["hp"] < 100]
-            if dmg_t:
-                near_t = min(dmg_t, key=lambda t: abs(t["r"].centerx - player.centerx))
-                coins -= 20; near_t["hp"] = min(100, near_t["hp"] + 60); play_s("buy")
-        lift_r.y += 6 if lift_r.y < lift_ty else (-6 if lift_r.y > lift_ty else 0)
-        if abs(lift_r.y - lift_ty) < 6: lift_r.y = lift_ty
-
-        spd = 10 + spd_l * 2
-        if ml: player.x -= spd; right = False
-        if mr: player.x += spd; right = True
-        player.x = max(0, min(W - p_sz, player.x))
-
-        pb = player.bottom; vy += 1.1; player.y += vy; on_g = False
-        for plat in (f1_r, f2_r, lift_r):
-            if vy >= 0 and pb <= plat.top + 14 and player.colliderect(plat):
-                player.bottom = plat.top; vy = 0; on_g = True
-
-        if scd > 0: scd -= 1
-        if muz_t > 0: muz_t -= 1
-        if mel_t > 0: mel_t -= 1
-        if mel_cd > 0: mel_cd -= 1
-        if rel_t > 0:
-            rel_t -= 1
-            if rel_t == 0: ammo = weapons[w_idx]["m"] + ammo_l * 6
-
-        if timer > 0: timer -= 1
-        else:
-            rotor += 1
-            if heli_x < player.centerx - 90: heli_x += 7
-            else: state = "WIN"
-
-        sp_t += 1
-        if sp_t >= max(45, 115 - kills * 2) and timer > 0:
-            sp_t = 0; es = int(H * 0.11)
-            on_top = random.random() < 0.35
-            ex = -es if (on_top or random.random() < 0.5) else W + es
-            ey = (f2_y if on_top else f1_y) - es
-            mhp = min(140, 40 + (kills // 10) * 10)
-            enemies.append({"r": pygame.Rect(ex, ey, es, es),
-                            "hp": mhp, "max_hp": mhp, "s": random.randint(4, 7), "vy": 0, "g": True, "atk_cd": 0})
-        for t in turrets:
-            if t["cd"] > 0: t["cd"] -= 1
+    def handle_tap(self, x, y):
+        st = self.state
+        if st == "MENU":
+            if self.in_r(self.b_play, x, y): self.play_s("buy"); self.reset()
+            elif self.in_r(self.b_exit, x, y): App.get_running_app().stop()
+            return
+        if st == "PAUSE":
+            if self.in_r(self.b_play, x, y): self.play_s("buy"); self.state = "PLAY"
+            elif self.in_r(self.b_exit, x, y): self.state = "MENU"
+            return
+        if st in ("OVER", "WIN"):
+            self.reset(); return
+        if st in ("SHOP", "BUFF"):
+            if self.in_r(self.cl_b, x, y): self.state = "PLAY"; return
+            if st == "SHOP":
+                if self.in_r(self.o1, x, y) and self.coins >= 30 and self.hp < 100:
+                    self.coins -= 30; self.hp = min(100, self.hp + 40); self.play_s("buy")
+                elif self.in_r(self.o2, x, y) and self.coins >= 40:
+                    self.coins -= 40; self.play_s("buy")
+                    bx = self.px + self.p_sz + 15 if self.right else self.px - 35
+                    self.bars.append([bx, self.py, 22, 55, 120])
+                elif self.in_r(self.o3, x, y) and self.w_idx < 2:
+                    c = 100 if self.w_idx == 0 else 200
+                    if self.coins >= c:
+                        self.coins -= c; self.w_idx += 1
+                        self.ammo = self.weapons[self.w_idx]["m"] + self.ammo_l * 6
+                        self.rel_t = 0; self.play_s("buy")
+                elif self.in_r(self.o4, x, y) and self.coins >= 80:
+                    self.coins -= 80; self.play_s("buy")
+                    self.turrets.append([self.px + self.p_sz * 0.5 - 15, self.py, 30, 35, 0, 100])
             else:
-                same_fl = [e["r"] for e in enemies if abs(e["r"].centery - t["r"].centery) < 120]
-                if same_fl:
-                    trg = min(same_fl, key=lambda r: abs(r.centerx - t["r"].centerx))
-                    dx = 1 if trg.centerx > t["r"].centerx else -1
-                    bullets.append({"r": pygame.Rect(t["r"].centerx, t["r"].centery - 6, 14, 5), "vx": 20 * dx, "vy": 0, "d": 15})
-                    t["cd"] = 35; play_s("shoot")
-        for b in bullets[:]:
-            b["r"].x += b["vx"]; b["r"].y += b["vy"]
-            if b["r"].right < 0 or b["r"].left > W: bullets.remove(b)
+                if self.in_r(self.o1, x, y) and self.coins >= 50 and self.spd_l < 4:
+                    self.coins -= 50; self.spd_l += 1; self.play_s("buy")
+                elif self.in_r(self.o2, x, y) and self.coins >= 70 and self.vamp_l < 4:
+                    self.coins -= 70; self.vamp_l += 1; self.play_s("buy")
+                elif self.in_r(self.o3, x, y) and self.coins >= 60 and self.ammo_l < 4:
+                    self.coins -= 60; self.ammo_l += 1
+                    self.ammo = self.weapons[self.w_idx]["m"] + self.ammo_l * 6; self.play_s("buy")
+                elif self.in_r(self.o4, x, y) and self.coins >= 80 and self.dmg_l < 4:
+                    self.coins -= 80; self.dmg_l += 1; self.play_s("buy")
+            return
 
-        for e in enemies[:]:
-            er = e["r"]
-            if e["atk_cd"] > 0: e["atk_cd"] -= 1
-            e_on_2nd = er.bottom <= f2_r.bottom + 10
-            p_on_2nd = player.bottom <= f2_r.bottom + 10
-            chase_p = False
-            if e_on_2nd:
-                if p_on_2nd and on_g: tx = player.centerx; chase_p = True
-                else: tx = bomb_r.centerx
+        if st == "PLAY":
+            if self.in_r(self.b_pause, x, y): self.state = "PAUSE"; return
+            if self.in_r(self.b_mel, x, y): self.do_melee()
+            if self.in_r(self.b_rel, x, y): self.start_rel()
+            pwr = self.gen_hp > 0
+            ntab = self.box_ov((self.px, self.py, self.p_sz, self.p_sz), self.tab_r, 30)
+            nlift = abs((self.px + self.p_sz * 0.5) - (self.lift_x + self.lift_w * 0.5)) < self.lift_w
+            if pwr and self.in_r(self.tab_r, x, y, 25): self.state = "BUFF"
+            if self.in_r(self.b_act, x, y):
+                if nlift:
+                    self.lift_top = not self.lift_top
+                    self.lift_ty = self.f2_y if self.lift_top else self.f1_y
+                elif pwr:
+                    self.state = "BUFF" if ntab else "SHOP"
+            if pwr and self.in_r(self.b_rep, x, y) and self.coins >= 20:
+                dmg_t = [t for t in self.turrets if t[5] < 100]
+                if dmg_t:
+                    nt = min(dmg_t, key=lambda t: abs(t[0] - self.px))
+                    self.coins -= 20; nt[5] = min(100, nt[5] + 60); self.play_s("buy")
+
+    def in_r(self, r, x, y, pad=0):
+        rx, ry, rw, rh = r
+        return (rx - pad) <= x <= (rx + rw + pad) and (ry - pad) <= y <= (ry + rh + pad)
+
+    def box_ov(self, a, b, pad=0):
+        ax, ay, aw, ah = a
+        bx, by, bw, bh = b
+        return (ax - pad) < (bx + bw + pad) and (ax + aw + pad) > (bx - pad) and (ay - pad) < (by + bh + pad) and (ay + ah + pad) > (by - pad)
+
+    def do_melee(self):
+        if self.mel_cd > 0: return
+        self.mel_t = 10; self.mel_cd = 24; self.play_s("melee")
+        dx = 1 if self.right else -1
+        hx = self.px + self.p_sz - 10 if self.right else self.px - 75
+        hr = (hx, self.py - 10, 85, self.p_sz + 20)
+        for e in self.enemies:
+            ex, ey, ew, eh, ehp, emax, es, evy, eg, ecd = e
+            if self.box_ov(hr, (ex, ey, ew, eh)):
+                e[4] -= 30 + self.dmg_l * 5; self.play_s("hit")
+                e[0] = max(0, min(self.W - ew, ex + 110 * dx))
+                e[7] = 7; e[8] = False
+
+    def update(self, dt):
+        if self.W < 10 or self.H < 10: return
+        W, H = self.W, self.H
+        if self.gen_hp <= 0 and self.state in ("SHOP", "BUFF"): self.state = "PLAY"
+
+        if self.state == "PLAY":
+            ml = mr = False
+            for fx, fy in self.fingers.values():
+                if self.in_r(self.b_l, fx, fy): ml = True
+                if self.in_r(self.b_r, fx, fy): mr = True
+                if self.in_r(self.b_j, fx, fy) and self.on_g: self.vy = 21; self.on_g = False
+                if self.in_r(self.b_f, fx, fy): self.shoot()
+
+            if self.lift_y < self.lift_ty: self.lift_y = min(self.lift_ty, self.lift_y + 6)
+            elif self.lift_y > self.lift_ty: self.lift_y = max(self.lift_ty, self.lift_y - 6)
+
+            spd = 10 + self.spd_l * 2
+            if ml: self.px -= spd; self.right = False
+            if mr: self.px += spd; self.right = True
+            self.px = max(0, min(W - self.p_sz, self.px))
+
+            pb = self.py; self.vy -= 1.1; self.py += self.vy; self.on_g = False
+            for plat_y, pl_x, pl_w in ((self.f1_y, -500, W * 3), (self.f2_y, 0, W - self.lift_w - 20), (self.lift_y, self.lift_x, self.lift_w)):
+                if self.vy <= 0 and pb >= plat_y - 14 and self.py <= plat_y and (self.px + self.p_sz) > pl_x and self.px < (pl_x + pl_w):
+                    self.py = plat_y; self.vy = 0; self.on_g = True
+
+            if self.scd > 0: self.scd -= 1
+            if self.muz_t > 0: self.muz_t -= 1
+            if self.mel_t > 0: self.mel_t -= 1
+            if self.mel_cd > 0: self.mel_cd -= 1
+            if self.rel_t > 0:
+                self.rel_t -= 1
+                if self.rel_t == 0: self.ammo = self.weapons[self.w_idx]["m"] + self.ammo_l * 6
+
+            if self.timer > 0: self.timer -= 1
             else:
-                if not p_on_2nd and on_g: tx = player.centerx; chase_p = True
-                elif gen_hp > 0: tx = gen_r.centerx
-                else: tx = player.centerx; chase_p = True
-            if e["g"] and e_on_2nd and random.random() < 0.018:
-                e["vy"] = -20; e["g"] = False
-            blk = False
-            for bar in bars[:]:
-                if er.colliderect(bar["r"]):
+                self.rotor += 1
+                if self.heli_x < self.px + self.p_sz * 0.5 - 90: self.heli_x += 7
+                else: self.state = "WIN"
+
+            self.sp_t += 1
+            if self.sp_t >= max(45, 115 - self.kills * 2) and self.timer > 0:
+                self.sp_t = 0; es = H * 0.11
+                on_top = random.random() < 0.35
+                ex = -es if (on_top or random.random() < 0.5) else W + es
+                ey = self.f2_y if on_top else self.f1_y
+                mhp = min(140, 40 + (self.kills // 10) * 10)
+                self.enemies.append([ex, ey, es, es, mhp, mhp, random.randint(4, 7), 0, True, 0])
+
+            for t in self.turrets:
+                if t[4] > 0: t[4] -= 1
+                else:
+                    same_fl = [e for e in self.enemies if abs(e[1] - t[1]) < 120]
+                    if same_fl:
+                        trg = min(same_fl, key=lambda e: abs(e[0] - t[0]))
+                        dx = 1 if trg[0] > t[0] else -1
+                        self.bullets.append([t[0] + 15, t[1] + 22, 20 * dx, 0, 15])
+                        t[4] = 35; self.play_s("shoot")
+
+            for b in self.bullets[:]:
+                b[0] += b[2]; b[1] += b[3]
+                if b[0] < -20 or b[0] > W + 20: self.bullets.remove(b)
+
+            for e in self.enemies[:]:
+                ex, ey, ew, eh, ehp, emax, es, evy, eg, ecd = e
+                if ecd > 0: e[9] -= 1
+                e_2nd = ey >= self.f2_y - 10
+                p_2nd = self.py >= self.f2_y - 10
+                chase_p = False
+                if e_2nd:
+                    if p_2nd and self.on_g: tx = self.px + self.p_sz * 0.5; chase_p = True
+                    else: tx = self.bomb_r[0] + 25
+                else:
+                    if not p_2nd and self.on_g: tx = self.px + self.p_sz * 0.5; chase_p = True
+                    elif self.gen_hp > 0: tx = self.gen_r[0] + 35
+                    else: tx = self.px + self.p_sz * 0.5; chase_p = True
+
+                if eg and e_2nd and random.random() < 0.018:
+                    e[7] = 20; e[8] = False
+
+                blk = False
+                for bar in self.bars[:]:
+                    if self.box_ov((ex, ey, ew, eh), (bar[0], bar[1], bar[2], bar[3])):
+                        blk = True
+                        if e[9] == 0:
+                            bar[4] -= 25; e[9] = 51
+                            if bar[4] <= 0: self.bars.remove(bar)
+                        break
+                for t in self.turrets[:]:
+                    if self.box_ov((ex, ey, ew, eh), (t[0], t[1], t[2], t[3])):
+                        blk = True
+                        if e[9] == 0:
+                            t[5] -= 25; e[9] = 51
+                            if t[5] <= 0: self.turrets.remove(t)
+                        break
+                if chase_p and abs((self.px + self.p_sz * 0.5) - (ex + ew * 0.5)) < self.p_sz * 0.85:
                     blk = True
-                    if e["atk_cd"] == 0:
-                        bar["hp"] -= 25; e["atk_cd"] = 51
-                        if bar["hp"] <= 0: bars.remove(bar)
-                    break
-            for t in turrets[:]:
-                if er.colliderect(t["r"]):
-                    blk = True
-                    if e["atk_cd"] == 0:
-                        t["hp"] -= 25; e["atk_cd"] = 51
-                        if t["hp"] <= 0: turrets.remove(t)
-                    break
-            if chase_p and abs(player.centerx - er.centerx) < p_sz * 0.85:
-                blk = True
-            if not blk: er.x += e["s"] * (1 if tx > er.centerx else -1)
-            eb = er.bottom; et = er.top; e["vy"] += 1.1; er.y += e["vy"]; e["g"] = False
-            if e["vy"] < 0 and et >= f2_r.bottom - 12 and er.colliderect(f2_r):
-                er.top = f2_r.bottom; e["vy"] = 0
-            for plat in (f1_r, f2_r):
-                if e["vy"] >= 0 and eb <= plat.top + 14 and er.colliderect(plat):
-                    er.bottom = plat.top; e["vy"] = 0; e["g"] = True
-            for b in bullets[:]:
-                if er.colliderect(b["r"]): e["hp"] -= b["d"]; play_s("hit"); bullets.remove(b); break
-            if e["hp"] <= 0:
-                enemies.remove(e); coins += 10; kills += 1
-                if vamp_l > 0: hp = min(100, hp + vamp_l * 4)
-                continue
-            if e["atk_cd"] == 0:
-                if e_on_2nd == p_on_2nd and er.colliderect(player.inflate(16, 0)):
-                    hp -= 15; e["atk_cd"] = 51; play_s("hit")
-                elif e_on_2nd and er.colliderect(bomb_r):
-                    bomb_hp -= 12; e["atk_cd"] = 51
-                elif not e_on_2nd and gen_hp > 0 and er.colliderect(gen_r):
-                    gen_hp = max(0, gen_hp - 15); e["atk_cd"] = 51
-                    if gen_hp == 0: play_s("alarm")
-        if hp <= 0 or bomb_hp <= 0: state = "OVER"
+                if not blk:
+                    e[0] += es * (1 if tx > (ex + ew * 0.5) else -1)
 
-    pwr = gen_hp > 0
-    screen.fill((28, 30, 38) if pwr else (14, 15, 20))
-    pygame.draw.rect(screen, (42, 44, 52) if pwr else (22, 23, 28), (40, 30, W - 80, f1_y - 30))
-    pygame.draw.line(screen, (55, 60, 70), (40, int(H * 0.28)), (W - lift_w - 25, int(H * 0.28)), 4)
-    for i, wx in enumerate(range(120, W - 220, 260)):
-        for j, wy in enumerate((int(H * 0.14), int(H * 0.52))):
-            pygame.draw.rect(screen, (18, 22, 32) if pwr else (10, 12, 18), (wx, wy, 110, 90))
-            if (i + j) % 2 == 0:
-                pygame.draw.line(screen, (70, 80, 95), (wx + 15, wy + 12), (wx + 48, wy + 45), 2)
-                pygame.draw.line(screen, (70, 80, 95), (wx + 48, wy + 45), (wx + 35, wy + 78), 2)
-                pygame.draw.line(screen, (70, 80, 95), (wx + 48, wy + 45), (wx + 85, wy + 60), 2)
+                eb = e[1]; e[7] -= 1.1; e[1] += e[7]; e[8] = False
+                if e[7] > 0 and (e[1] + eh) >= self.f2_y - 16 and e[1] < self.f2_y and e[0] < (W - self.lift_w - 20):
+                    e[1] = self.f2_y - 16 - eh; e[7] = 0
+                for plat_y, pl_x, pl_w in ((self.f1_y, -500, W * 3), (self.f2_y, 0, W - self.lift_w - 20)):
+                    if e[7] <= 0 and eb >= plat_y - 14 and e[1] <= plat_y and (e[0] + ew) > pl_x and e[0] < (pl_x + pl_w):
+                        e[1] = plat_y; e[7] = 0; e[8] = True
 
-    for bx, by_c, bw, bh in ((90, f1_y - 42, 46, 42), (140, f1_y - 34, 38, 34), (112, f1_y - 74, 34, 32), (W - lift_w - 130, f2_y - 36, 40, 36)):
-        pygame.draw.rect(screen, (95, 70, 45) if pwr else (55, 40, 28), (bx, by_c, bw, bh))
-        pygame.draw.rect(screen, (65, 48, 30), (bx, by_c, bw, bh), 2)
-        pygame.draw.line(screen, (65, 48, 30), (bx, by_c), (bx + bw, by_c + bh), 2)
+                for b in self.bullets[:]:
+                    if self.box_ov((e[0], e[1], ew, eh), (b[0], b[1], 15, 6)):
+                        e[4] -= b[4]; self.play_s("hit"); self.bullets.remove(b); break
+                if e[4] <= 0:
+                    self.enemies.remove(e); self.coins += 10; self.kills += 1
+                    if self.vamp_l > 0: self.hp = min(100, self.hp + self.vamp_l * 4)
+                    continue
 
-    pygame.draw.rect(screen, (20, 20, 25), (lift_x - 5, 30, lift_w + 10, f1_y - 30))
-    pygame.draw.rect(screen, (180, 150, 50), lift_r)
-    pygame.draw.rect(screen, (75, 80, 85), f1_r); pygame.draw.rect(screen, (85, 90, 95), f2_r)
-    for t in turrets:
-        pygame.draw.rect(screen, (110, 120, 130), t["r"], border_radius=5)
-        pygame.draw.rect(screen, (30, 30, 35), (t["r"].x - 6, t["r"].y + 6, 42, 8))
-        pygame.draw.rect(screen, (60, 220, 90), (t["r"].x, t["r"].y - 8, int(30 * max(0, t["hp"]) / 100), 5))
+                if e[9] == 0:
+                    if e_2nd == p_2nd and self.box_ov((e[0], e[1], ew, eh), (self.px, self.py, self.p_sz, self.p_sz), 8):
+                        self.hp -= 15; e[9] = 51; self.play_s("hit")
+                    elif e_2nd and self.box_ov((e[0], e[1], ew, eh), self.bomb_r):
+                        self.bomb_hp -= 12; e[9] = 51
+                    elif not e_2nd and self.gen_hp > 0 and self.box_ov((e[0], e[1], ew, eh), self.gen_r):
+                        self.gen_hp = max(0, self.gen_hp - 15); e[9] = 51
+                        if self.gen_hp == 0: self.play_s("alarm")
 
-    pygame.draw.rect(screen, (55, 65, 75) if pwr else (35, 35, 40), gen_r, border_radius=6)
-    pygame.draw.rect(screen, (40, 200, 255) if pwr else (90, 30, 30), gen_r.inflate(-24, -24), border_radius=4)
-    pygame.draw.rect(screen, (60, 220, 90), (gen_r.x - 5, gen_r.y - 14, int(80 * max(0, gen_hp) / 250), 7))
-    g_lbl = f_sm.render("ГЕНЕРАТОР" if pwr else "СЛОМАН", True, (100, 220, 255) if pwr else (255, 80, 80))
-    screen.blit(g_lbl, (gen_r.centerx - g_lbl.get_width() // 2, gen_r.top - 36))
+            if self.hp <= 0 or self.bomb_hp <= 0: self.state = "OVER"
 
-    pygame.draw.rect(screen, (30, 35, 45), tab_r, border_radius=6)
-    pygame.draw.rect(screen, (0, 210, 255) if pwr else (45, 50, 55), tab_r.inflate(-8, -14))
-    if pwr:
-        pygame.draw.line(screen, (255, 255, 255), (tab_r.x + 8, tab_r.y + 14), (tab_r.right - 8, tab_r.y + 14), 2)
-        pygame.draw.line(screen, (100, 255, 160), (tab_r.x + 8, tab_r.y + 22), (tab_r.right - 12, tab_r.y + 22), 2)
-    t_lbl = f_sm.render("БАФФЫ" if pwr else "OFFLINE", True, (0, 220, 255) if pwr else (130, 130, 130))
-    screen.blit(t_lbl, (tab_r.centerx - t_lbl.get_width() // 2, tab_r.top - 24))
+        self.render()
 
-    pygame.draw.rect(screen, (50, 55, 60), bomb_r, border_radius=6)
-    pygame.draw.circle(screen, (255, 50, 50) if (pygame.time.get_ticks() // 300) % 2 == 0 else (150, 30, 30), bomb_r.center, 10)
-    pygame.draw.rect(screen, (60, 220, 90), (bomb_r.x - 15, bomb_r.y - 16, int(80 * max(0, bomb_hp) / 200), 8))
+    def render(self):
+        W, H = self.W, self.H
+        pwr = self.gen_hp > 0
+        self.canvas.clear()
+        with self.canvas:
+            Color(*(0.11, 0.12, 0.15) if pwr else (0.05, 0.06, 0.08))
+            Rectangle(pos=(0, 0), size=(W, H))
+            Color(*(0.16, 0.17, 0.20) if pwr else (0.08, 0.09, 0.11))
+            Rectangle(pos=(40, self.f1_y), size=(W - 80, H - self.f1_y - 30))
 
-    if state in ("MENU", "PAUSE"):
-        ov = pygame.Surface((W, H), pygame.SRCALPHA)
-        ov.fill((10, 12, 18, 200))
-        screen.blit(ov, (0, 0))
-        ttl = f_lg.render("UNCHANGED" if state == "MENU" else "ПАУЗА", True, (0, 215, 255))
-        sub = f_sm.render("v1.7 | ЗАЩИТИ ГЕНЕРАТОР И БОМБУ" if state == "MENU" else f"УБИТО: {kills}  |  МОНЕТЫ: {coins}", True, (180, 190, 210))
-        screen.blit(ttl, (W // 2 - ttl.get_width() // 2, int(H * 0.18)))
-        screen.blit(sub, (W // 2 - sub.get_width() // 2, int(H * 0.34)))
-        for br, col, txt in ((b_play, (60, 210, 110), "ИГРАТЬ" if state == "MENU" else "ПРОДОЛЖИТЬ"),
-                             (b_exit, (210, 65, 65), "ВЫХОД" if state == "MENU" else "В МЕНЮ")):
-            pygame.draw.rect(screen, col, br, border_radius=18)
-            ts = f_md.render(txt, True, (20, 20, 20))
-            screen.blit(ts, (br.centerx - ts.get_width() // 2, br.centery - ts.get_height() // 2))
-    else:
-        s_lbl = f_sm.render("soldier", True, (140, 210, 255))
-        screen.blit(s_lbl, (player.centerx - s_lbl.get_width() // 2, player.top - 28))
-        for bar in bars: pygame.draw.rect(screen, (150, 100, 50), bar["r"])
-        pygame.draw.rect(screen, (70, 150, 255), player)
-        gun = pygame.Rect(player.right - 4 if right else player.left - 26, player.centery - 6, 30, 10)
-        pygame.draw.rect(screen, (20, 20, 25), gun)
-        if muz_t > 0:
-            mx, my, ds = (gun.right if right else gun.left), gun.centery, (1 if right else -1)
-            pygame.draw.polygon(screen, (255, 160, 0), [(mx, my), (mx + 26 * ds, my - 11), (mx + 38 * ds, my), (mx + 26 * ds, my + 11)])
-        if mel_t > 0:
-            sx = player.right + 15 if right else player.left - 15
-            pygame.draw.arc(screen, (255, 255, 255), (sx - 35, player.top - 10, 70, player.height + 20), -1.2 if right else 1.9, 1.2 if right else 4.3, 6)
-        for b in bullets: pygame.draw.rect(screen, (255, 230, 60), b["r"])
-        for e in enemies:
-             er = e["r"]
-             pygame.draw.rect(screen, (220, 60, 60), er)
-             pygame.draw.rect(screen, (60, 220, 90), (er.x, er.y - 10, int(er.width * max(0, e["hp"]) / e["max_hp"]), 6))
-             f_lbl = f_sm.render("furry", True, (255, 160, 160))
-             screen.blit(f_lbl, (er.centerx - f_lbl.get_width() // 2, er.y - 36))
-        if timer <= 0:
-            pygame.draw.ellipse(screen, (60, 110, 70), (heli_x, int(H * 0.16), 170, 65))
-            pygame.draw.rect(screen, (50, 95, 60), (heli_x - 80, int(H * 0.16) + 22, 90, 16))
-            rw = 180 if (rotor // 2) % 2 == 0 else 40
-            pygame.draw.line(screen, (220, 220, 220), (heli_x + 85 - rw, int(H * 0.16) - 10), (heli_x + 85 + rw, int(H * 0.16) - 10), 5)
+            for wx in range(120, int(W - 220), 260):
+                for wy in (H * 0.35, H * 0.72):
+                    Color(*(0.07, 0.09, 0.13) if pwr else (0.04, 0.05, 0.07))
+                    Rectangle(pos=(wx, wy), size=(110, 90))
 
-        pygame.draw.rect(screen, (160, 40, 40), (20, 18, 200, 22))
-        pygame.draw.rect(screen, (60, 220, 90), (20, 18, int(200 * max(0, hp) / 100), 22))
-        screen.blit(f_sm.render(f"HP: {int(hp)}", True, (255, 255, 255)), (25, 20))
-        rep_col = (100, 230, 130) if (pwr and any(t["hp"] < 100 for t in turrets)) else (90, 95, 105)
-        pygame.draw.rect(screen, rep_col, b_rep, border_radius=12)
-        rt = f_sm.render("РЕМОНТ (20)" if pwr else "НЕТ ЭНЕРГИИ", True, (20, 20, 20))
-        screen.blit(rt, (b_rep.centerx - rt.get_width() // 2, b_rep.centery - rt.get_height() // 2))
+            Color(0.08, 0.08, 0.10)
+            Rectangle(pos=(self.lift_x - 5, self.f1_y), size=(self.lift_w + 10, H - self.f1_y - 30))
+            Color(0.71, 0.59, 0.20)
+            Rectangle(pos=(self.lift_x, self.lift_y - 16), size=(self.lift_w, 16))
+            Color(0.29, 0.31, 0.33)
+            Rectangle(pos=(-500, 0), size=(W * 3, self.f1_y))
+            Color(0.33, 0.35, 0.37)
+            Rectangle(pos=(0, self.f2_y - 16), size=(W - self.lift_w - 20, 16))
 
-        cw_d = weapons[w_idx]
-        screen.blit(f_sm.render("ПЕРЕЗАРЯДКА..." if rel_t > 0 else f"{cw_d['n']}: {ammo}/{cw_d['m'] + ammo_l * 6}", True, (255, 230, 120)), (20, 48))
-        sl = timer // 60
-        screen.blit(f_md.render(f"БОМБА: {sl // 60:02d}:{sl % 60:02d}", True, (255, 90, 90)), (W // 2 - 90, 18))
-        screen.blit(f_sm.render(f"Монеты: {coins} | Убито: {kills}", True, (255, 215, 0)), (W - 430, 20))
+            for t in self.turrets:
+                Color(0.43, 0.47, 0.51)
+                Rectangle(pos=(t[0], t[1]), size=(30, 35))
+                Color(0.24, 0.86, 0.35)
+                Rectangle(pos=(t[0], t[1] + 40), size=(30 * max(0, t[5]) / 100.0, 5))
 
-        pygame.draw.rect(screen, (70, 75, 90), b_pause, border_radius=10)
-        pt = f_sm.render("||", True, (255, 255, 255))
-        screen.blit(pt, (b_pause.centerx - pt.get_width() // 2, b_pause.centery - pt.get_height() // 2))
+            gx, gy, gw, gh = self.gen_r
+            Color(*(0.22, 0.25, 0.29) if pwr else (0.14, 0.14, 0.16))
+            Rectangle(pos=(gx, gy), size=(gw, gh))
+            Color(*(0.16, 0.78, 1.0) if pwr else (0.35, 0.12, 0.12))
+            Rectangle(pos=(gx + 12, gy + 12), size=(gw - 24, gh - 24))
+            Color(0.24, 0.86, 0.35)
+            Rectangle(pos=(gx - 5, gy + gh + 8), size=(80 * max(0, self.gen_hp) / 250.0, 7))
+            self.draw_txt("ГЕНЕРАТОР" if pwr else "СЛОМАН", gx + gw * 0.5, gy + gh + 28, H * 0.032, (0.4, 0.86, 1, 1) if pwr else (1, 0.3, 0.3, 1))
 
-        act_c = (100, 180, 255) if (pwr or nlift) else (90, 95, 105)
-        mel_c = (255, 140, 50) if mel_cd == 0 else (120, 90, 60)
-        for r, col, txt in ((b_l, (210,210,210), "<"), (b_r, (210,210,210), ">"), (b_act, act_c, act_lbl),
-                            (b_rel, (180,140,255), "R"), (b_f, (255,85,85), "FIRE"), (b_j, (255,190,60), "UP"), (b_mel, mel_c, "УДАР")):
-            pygame.draw.rect(screen, col, r, border_radius=16)
-            ts = f_sm.render(txt, True, (20, 20, 20))
-            screen.blit(ts, (r.centerx - ts.get_width() // 2, r.centery - ts.get_height() // 2))
+            tx, ty, tw, th = self.tab_r
+            Color(0.12, 0.14, 0.18)
+            Rectangle(pos=(tx, ty), size=(tw, th))
+            Color(*(0.0, 0.82, 1.0) if pwr else (0.18, 0.20, 0.22))
+            Rectangle(pos=(tx + 4, ty + 7), size=(tw - 8, th - 14))
+            self.draw_txt("БАФФЫ" if pwr else "OFFLINE", tx + tw * 0.5, ty + th + 16, H * 0.032, (0, 0.86, 1, 1) if pwr else (0.5, 0.5, 0.5, 1))
 
-        if state in ("SHOP", "BUFF"):
-            pygame.draw.rect(screen, (35, 38, 48), m_r, border_radius=20)
-            pygame.draw.rect(screen, (220, 60, 60), cl_b, border_radius=12)
-            screen.blit(f_md.render("X", True, (255, 255, 255)), (cl_b.centerx - 12, cl_b.centery - 15))
-            if state == "SHOP":
-                opts = ("Аптечка +40HP (30)", "Баррикада (40)", f"Оружие ({100 if w_idx==0 else 200})" if w_idx < 2 else "Макс. оружие", "Турель 1 ур. (80)")
+            bx, by, bw, bh = self.bomb_r
+            Color(0.20, 0.22, 0.24)
+            Rectangle(pos=(bx, by), size=(bw, bh))
+            Color(1.0, 0.2, 0.2)
+            Ellipse(pos=(bx + 15, by + 12), size=(20, 20))
+            Color(0.24, 0.86, 0.35)
+            Rectangle(pos=(bx - 15, by + bh + 10), size=(80 * max(0, self.bomb_hp) / 200.0, 8))
+
+            if self.state in ("MENU", "PAUSE"):
+                Color(0.04, 0.05, 0.07, 0.82)
+                Rectangle(pos=(0, 0), size=(W, H))
+                self.draw_txt("UNCHANGED" if self.state == "MENU" else "ПАУЗА", W * 0.5, H * 0.76, H * 0.10, (0, 0.85, 1, 1))
+                sub = "v1.7 | ЗАЩИТИ ГЕНЕРАТОР И БОМБУ" if self.state == "MENU" else f"УБИТО: {self.kills}  |  МОНЕТЫ: {self.coins}"
+                self.draw_txt(sub, W * 0.5, H * 0.62, H * 0.038, (0.7, 0.75, 0.82, 1))
+                for br, col, txt in ((self.b_play, (0.24, 0.82, 0.43), "ИГРАТЬ" if self.state == "MENU" else "ПРОДОЛЖИТЬ"),
+                                     (self.b_exit, (0.82, 0.25, 0.25), "ВЫХОД" if self.state == "MENU" else "В МЕНЮ")):
+                    Color(*col)
+                    Rectangle(pos=(br[0], br[1]), size=(br[2], br[3]))
+                    self.draw_txt(txt, br[0] + br[2] * 0.5, br[1] + br[3] * 0.5, H * 0.048, (0.08, 0.08, 0.08, 1))
             else:
-                opts = (f"Скорость {spd_l}/4 (50)", f"Вампиризм {vamp_l}/4 (70)", f"Патроны {ammo_l}/4 (60)", f"Урон {dmg_l}/4 (80)")
-            for br, ot in zip((o1, o2, o3, o4), opts):
-                pygame.draw.rect(screen, (60, 65, 80), br, border_radius=12)
-                screen.blit(f_sm.render(ot, True, (255, 255, 255)), (br.x + 20, br.centery - 12))
-        elif state in ("OVER", "WIN"):
-            msg = "ПОБЕДА! ВЕРТОЛЕТ ПРИЛЕТЕЛ!" if state == "WIN" else "ПОРАЖЕНИЕ! НАЖМИ ДЛЯ РЕСТАРТА"
-            col_m = (80, 255, 120) if state == "WIN" else (255, 80, 80)
-            screen.blit(f_md.render(msg, True, col_m), (W // 2 - 220, H // 2)) 
-    pygame.display.flip()
-    clock.tick(60)
-pygame.quit()
+                self.draw_txt("soldier", self.px + self.p_sz * 0.5, self.py + self.p_sz + 18, H * 0.032, (0.55, 0.82, 1, 1))
+                for bar in self.bars:
+                    Color(0.59, 0.39, 0.20)
+                    Rectangle(pos=(bar[0], bar[1]), size=(22, 55))
+                Color(0.27, 0.59, 1.0)
+                Rectangle(pos=(self.px, self.py), size=(self.p_sz, self.p_sz))
+                gx_p = self.px + self.p_sz - 4 if self.right else self.px - 26
+                Color(0.08, 0.08, 0.10)
+                Rectangle(pos=(gx_p, self.py + self.p_sz * 0.45), size=(30, 10))
+                if self.muz_t > 0:
+                    Color(1.0, 0.63, 0.0)
+                    Ellipse(pos=(gx_p + (30 if self.right else -24), self.py + self.p_sz * 0.42), size=(24, 16))
+                if self.mel_t > 0:
+                    Color(1, 1, 1)
+                    Line(circle=(self.px + (self.p_sz if self.right else 0), self.py + self.p_sz * 0.5, 45, -60 if self.right else 120, 60 if self.right else 240), width=4)
+
+                Color(1.0, 0.90, 0.24)
+                for b in self.bullets:
+                    Rectangle(pos=(b[0], b[1]), size=(15, 6))
+
+                for e in self.enemies:
+                    Color(0.86, 0.24, 0.24)
+                    Rectangle(pos=(e[0], e[1]), size=(e[2], e[3]))
+                    Color(0.24, 0.86, 0.35)
+                    Rectangle(pos=(e[0], e[1] + e[3] + 6), size=(e[2] * max(0, e[4]) / e[5], 6))
+                    self.draw_txt("furry", e[0] + e[2] * 0.5, e[1] + e[3] + 24, H * 0.032, (1, 0.63, 0.63, 1))
+
+                if self.timer <= 0:
+                    Color(0.24, 0.43, 0.27)
+                    Ellipse(pos=(self.heli_x, H * 0.78), size=(170, 65))
+                    rw = 180 if (self.rotor // 2) % 2 == 0 else 40
+                    Color(0.86, 0.86, 0.86)
+                    Line(points=[self.heli_x + 85 - rw, H * 0.78 + 75, self.heli_x + 85 + rw, H * 0.78 + 75], width=4)
+
+                Color(0.63, 0.16, 0.16)
+                Rectangle(pos=(20, H - 40), size=(200, 22))
+                Color(0.24, 0.86, 0.35)
+                Rectangle(pos=(20, H - 40), size=(200 * max(0, self.hp) / 100.0, 22))
+                self.draw_txt(f"HP: {int(self.hp)}", 75, H - 29, H * 0.035)
+
+                cw = self.weapons[self.w_idx]
+                wtxt = "ПЕРЕЗАРЯДКА..." if self.rel_t > 0 else f"{cw['n']}: {self.ammo}/{cw['m'] + self.ammo_l * 6}"
+                self.draw_txt(wtxt, 20, H - 62, H * 0.035, (1, 0.9, 0.47, 1), center=False)
+                sl = self.timer // 60
+                self.draw_txt(f"БОМБА: {sl // 60:02d}:{sl % 60:02d}", W * 0.5, H - 30, H * 0.048, (1, 0.35, 0.35, 1))
+                self.draw_txt(f"Монеты: {self.coins} | Убито: {self.kills}", W - 260, H - 30, H * 0.035, (1, 0.84, 0, 1))
+
+                Color(0.27, 0.29, 0.35)
+                Rectangle(pos=(self.b_pause[0], self.b_pause[1]), size=(50, 44))
+                self.draw_txt("||", self.b_pause[0] + 25, self.b_pause[1] + 22, H * 0.038)
+
+                ntab = self.box_ov((self.px, self.py, self.p_sz, self.p_sz), self.tab_r, 30)
+                nlift = abs((self.px + self.p_sz * 0.5) - (self.lift_x + self.lift_w * 0.5)) < self.lift_w
+                act_lbl = ("ЛИФТ ВНИЗ" if self.lift_top else "ЛИФТ ВВЕРХ") if nlift else ("НЕТ ЭНЕРГИИ" if not pwr else ("БАФФЫ" if ntab else "МАГАЗИН"))
+                act_c = (0.39, 0.71, 1.0) if (pwr or nlift) else (0.35, 0.37, 0.41)
+                mel_c = (1.0, 0.55, 0.20) if self.mel_cd == 0 else (0.47, 0.35, 0.24)
+                rep_c = (0.39, 0.90, 0.51) if (pwr and any(t[5] < 100 for t in self.turrets)) else (0.35, 0.37, 0.41)
+
+                for br, col, txt in ((self.b_l, (0.82, 0.82, 0.82), "<"), (self.b_r, (0.82, 0.82, 0.82), ">"),
+                                     (self.b_act, act_c, act_lbl), (self.b_rel, (0.71, 0.55, 1.0), "R"),
+                                     (self.b_f, (1.0, 0.33, 0.33), "FIRE"), (self.b_j, (1.0, 0.75, 0.24), "UP"),
+                                     (self.b_mel, mel_c, "УДАР"), (self.b_rep, rep_c, "РЕМОНТ (20)" if pwr else "НЕТ ЭНЕРГИИ")):
+                    Color(*col)
+                    Rectangle(pos=(br[0], br[1]), size=(br[2], br[3]))
+                    self.draw_txt(txt, br[0] + br[2] * 0.5, br[1] + br[3] * 0.5, H * 0.032, (0.08, 0.08, 0.08, 1))
+
+                if self.state in ("SHOP", "BUFF"):
+                    Color(0.14, 0.15, 0.19)
+                    Rectangle(pos=(self.m_r[0], self.m_r[1]), size=(self.m_r[2], self.m_r[3]))
+                    Color(0.86, 0.24, 0.24)
+                    Rectangle(pos=(self.cl_b[0], self.cl_b[1]), size=(50, 50))
+                    self.draw_txt("X", self.cl_b[0] + 25, self.cl_b[1] + 25, H * 0.048)
+                    if self.state == "SHOP":
+                        opts = ("Аптечка +40HP (30)", "Баррикада (40)", f"Оружие ({100 if self.w_idx==0 else 200})" if self.w_idx < 2 else "Макс. оружие", "Турель 1 ур. (80)")
+                    else:
+                        opts = (f"Скорость {self.spd_l}/4 (50)", f"Вампиризм {self.vamp_l}/4 (70)", f"Патроны {self.ammo_l}/4 (60)", f"Урон {self.dmg_l}/4 (80)")
+                    for br, ot in zip((self.o1, self.o2, self.o3, self.o4), opts):
+                        Color(0.24, 0.25, 0.31)
+                        Rectangle(pos=(br[0], br[1]), size=(br[2], br[3]))
+                        self.draw_txt(ot, br[0] + 20, br[1] + br[3] * 0.5, H * 0.036, center=False)
+                elif self.state in ("OVER", "WIN"):
+                    msg = "ПОБЕДА! ВЕРТОЛЕТ ПРИЛЕТЕЛ!" if self.state == "WIN" else "ПОРАЖЕНИЕ! НАЖМИ ДЛЯ РЕСТАРТА"
+                    col_m = (0.31, 1, 0.47, 1) if self.state == "WIN" else (1, 0.31, 0.31, 1)
+                    self.draw_txt(msg, W * 0.5, H * 0.5, H * 0.048, col_m)
+
+class UnchangedApp(App):
+    def build(self):
+        return GameWidget()
+
+if __name__ == "__main__":
+    UnchangedApp().run()
