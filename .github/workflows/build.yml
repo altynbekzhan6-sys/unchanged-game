@@ -9,10 +9,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential git unzip zip openjdk-17-jdk autoconf automake libtool pkg-config cmake ffmpeg libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev zlib1g-dev
+          sudo apt-get install -y build-essential git unzip zip autoconf automake libtool pkg-config cmake ffmpeg libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev zlib1g-dev
           pip install "setuptools<70" "cython<3.0" buildozer
       - name: Build with Buildozer
         run: buildozer -v android debug
