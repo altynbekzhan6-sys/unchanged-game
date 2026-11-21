@@ -6,7 +6,7 @@ source.dir = .
 source.include_exts = py,png,jpg,kv,atlas
 version = 1.7
 icon.filename = %(source.dir)s/icon.jpg
-requirements = python3,pygame_ce
+requirements = python3,kivy==2.3.0
 orientation = landscape
 fullscreen = 1
 android.archs = arm64-v8a
@@ -14,7 +14,6 @@ android.api = 33
 android.minapi = 21
 android.allow_backup = True
 android.accept_sdk_license = True
-p4a.bootstrap = sdl2
 
 [buildozer]
 log_level = 2
