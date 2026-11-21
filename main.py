@@ -1,9 +1,12 @@
-import pygame, random, math, struct, io, wave
+import pygame, random, math, struct, wave, os, tempfile
 
-pygame.mixer.pre_init(22050, -16, 1, 512)
+try:
+    pygame.mixer.pre_init(22050, -16, 1, 512)
+except Exception:
+    pass
 pygame.init()
 pygame.font.init()
-screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+screen = pygame.display.set_mode((0, 0))
 W, H = screen.get_size()
 screen.fill((28, 30, 38))
 pygame.display.flip()
@@ -14,8 +17,8 @@ def make_snd(kind):
         sr = 22050
         dur = 0.09 if kind in ("hit", "buy") else (0.14 if kind in ("shoot", "melee", "rel") else 0.45)
         n = int(sr * dur)
-        buf = io.BytesIO()
-        with wave.open(buf, "wb") as wf:
+        path = os.path.join(tempfile.gettempdir(), f"unch_{kind}.wav")
+        with wave.open(path, "wb") as wf:
             wf.setnchannels(1); wf.setsampwidth(2); wf.setframerate(sr)
             frames = bytearray()
             for i in range(n):
@@ -36,8 +39,7 @@ def make_snd(kind):
                     v = math.sin(2 * math.pi * (520 if int(t * 14) % 2 == 0 else 360) * t) * env * 0.7
                 frames += struct.pack("<h", int(max(-1, min(1, v)) * 22000))
             wf.writeframes(frames)
-        buf.seek(0)
-        return pygame.mixer.Sound(buf)
+        return pygame.mixer.Sound(path)
     except Exception:
         return None
 
