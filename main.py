@@ -1,3 +1,5 @@
+import os
+os.environ['SDL_VIDEODRIVER'] = 'android'
 import pygame, random, math, struct, wave, os, tempfile, traceback
 
 try:
