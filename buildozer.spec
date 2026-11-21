@@ -6,7 +6,7 @@ source.dir = .
 source.include_exts = py,png,jpg,kv,atlas
 version = 1.7
 icon.filename = %(source.dir)s/icon.jpg
-requirements = python3,kivy==2.3.0
+requirements = python3,kivy
 orientation = landscape
 fullscreen = 1
 android.archs = arm64-v8a
